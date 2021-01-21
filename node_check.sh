@@ -10,6 +10,12 @@ sinceLogDay=$(date +%F -d "$logCheckDays days ago")
 healthLogDir="/tmp/healthCheck";cd /tmp/healthCheck
 maxLogSize=20480
 maxdiskUsagepercentage=85
+Domain=("www.sina.com" "www.baidu.com" "www.fujiangong.com" "lucky fjg")
+k8sConfDir="/etc/kubernetes"
+cpuSoftInterrupt=80
+maxusedConntrackPercentage=80
+maxfilePercentage=80
+maxdockerFDUsedPercentage=80
 
 #定义日志的最大字节数，20480B=20K
 checkLogSize(){
@@ -39,6 +45,31 @@ red(){
 yellow(){
     echo -e "\033[33m\033[01m $1 \033[0m"
 }
+
+common_dns_check(){
+  if ! host "$1" >/dev/null;then
+    red "  └──[Error] node check domain $domain error"
+  else
+    green "  └──[Info] node check domain $domain pass"
+  fi
+}
+
+check_node_dns() {
+  for domain in "${Domain[@]}";do
+    common_dns_check "$domain"
+  done
+}
+
+check_node_to_apiserver(){
+  local apiserver=$(grep server "$k8sConfDir"/kubelet.conf|awk -F server: '{print $2}'|sed -e 's/^[[:space:]]*//')
+  local serverStatus=$(curl -sk "$apiserver"/healthz)
+  if [[ "$serverStatus" == "ok" ]];then
+    green  "  └──[Info] node -> apiserver  is ok"
+  else
+    red  "  └──[Error] node -> apiserver is $serverStatus"
+  fi
+}
+
 
 
 	#输出uptime和负载
@@ -92,14 +123,14 @@ for n in $NETDEV
   do
     cd /tmp/healthCheck
     nicStatus=$(ip link show $n|grep  -o -E "state[[:space:]]*[[:upper:]]*"|awk '{print $NF}')
-	maxRxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk '{print $3}'|sort  -nr |head -n1)
-	maxTxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk '{print $4}'|sort  -nr |head -n1)
-	maxRxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk '{print $5}'|sort  -nr |head -n1)
-	maxTxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk '{print $6}'|sort  -nr |head -n1)
-	avgRxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk '{print $3}')
-	avgTxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk '{print $4}')
-	avgRxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk '{print $5}')
-	avgTxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk '{print $6}')
+	maxRxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk -v nic=$n '$(NF-7)==nic {print $(NF-6)}'|sort  -nr |head -n1)
+	maxTxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk -v nic=$n '$(NF-7)==nic {print $(NF-5)}'|sort  -nr |head -n1)
+	maxRxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk -v nic=$n '$(NF-7)==nic {print $(NF-4)}'|sort  -nr |head -n1)
+	maxTxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*|Average:"|awk -v nic=$n '$(NF-7)==nic {print $(NF-3)}'|sort  -nr |head -n1)
+	avgRxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk -v nic=$n '$(NF-7)==nic {print $(NF-6)}')
+	avgTxpckPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk -v nic=$n '$(NF-7)==nic {print $(NF-5)}')
+	avgRxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk -v nic=$n '$(NF-7)==nic {print $(NF-4)}')
+	avgTxkBPercent=$(cat netStatus.log |grep $n|grep -v -E "veth*"|grep Average|awk -v nic=$n '$(NF-7)==nic {print $(NF-3)}')
 	echo -e "[INFO]NETDEV $n---\nStatus:$nicStatus\nmaxRxpckPercent:$maxRxpckPercent\nmaxTxpckPercent:$maxTxpckPercent\nmaxRxkBPercent:$maxRxkBPercent\nmaxTxkBPercent:$maxTxkBPercent\n"average is" $avgRxpckPercent $avgTxpckPercent $avgRxkBPercent $avgTxkBPercent\n---\n"
   done
 }
@@ -131,8 +162,8 @@ dockerPid=$(ps aux |grep /bin/dockerd|grep -v grep |awk '{print $2}')
 if [[ ! -z $dockerPid ]] ;then
   dockerOpenfileLimit=$(cat /proc/$dockerPid/limits |grep files |awk '{print $(NF-1)}')
   usedFD=$(ls -lR  /proc/$dockerPid/fd |grep "^l"|wc -l)
-  FDUsedPercentage=$(awk 'BEGIN{printf "%.1f%%\n",('$usedFD'/'$dockerOpenfileLimit')*100}')
-  echo -e "[INFO] dockerd openfileLimit info:\nmax:$dockerOpenfileLimit\nusedFD:$usedFD\nFDUsedPercentage:$FDUsedPercentage\n"
+  dockerFDUsedPercentage=$(awk 'BEGIN{printf "%.3f%%\n",('$usedFD'/'$dockerOpenfileLimit')*100}')
+  echo -e "[INFO] dockerd openfileLimit info:\nmax:$dockerOpenfileLimit\nusedFD:$usedFD\ndockerFDUsedPercentage:$FDUsedPercentage\n"
 fi 
   
 
@@ -176,7 +207,7 @@ else
 fi
   
   ## kubelet健康端口检查
-kubeletCheckEndpoint=$(ss -tunlp|grep kubelet|grep 127.0.0.1|grep 10|awk '{print $5}')  
+kubeletCheckEndpoint=$(ss -tunlp|grep kubelet|grep 127.0.0.1|grep 102|awk '{print $5}')  
 kubeletCheckResult=$(curl $kubeletCheckEndpoint/healthz)
 if [[ $kubeletCheckResult == "ok" ]] ;then
   echo -e "[INFO] kubelet port health check passed\n"
@@ -230,7 +261,7 @@ fi
 check_openfiles(){
 openfileUsed=$(cat /proc/sys/fs/file-nr|awk '{print $1}')
 maxOpenfiles=$(cat /proc/sys/fs/file-nr|awk '{print $NF}')
-filePercentage=$(awk 'BEGIN{printf "%.1f%%\n",('$openfileUsed'/'$maxOpenfiles')*100}')
+filePercentage=$(awk 'BEGIN{printf "%.3f%%\n",('$openfileUsed'/'$maxOpenfiles')*100}')
 pidMax=$(cat /proc/sys/kernel/pid_max)
 echo -e "[INFO] the node file and pid info:\nopenfileUsed:$openfileUsed\nmaxOpenfiles:$maxOpenfiles\nopenfileUsedPercentage:$filePercentage\npid-max:$pidMax\n"
 }
@@ -239,7 +270,7 @@ echo -e "[INFO] the node file and pid info:\nopenfileUsed:$openfileUsed\nmaxOpen
 check_nf_conntrack(){
 conntrackMax=$(cat /proc/sys/net/nf_conntrack_max) 
 usedConntrack=$(cat /proc/net/nf_conntrack |wc -l)
-usedConntrackPercentage=$(awk 'BEGIN{printf "%.1f%%\n",('$usedConntrack'/'$conntrackMax')*100}')
+usedConntrackPercentage=$(awk 'BEGIN{printf "%.3f%%\n",('$usedConntrack'/'$conntrackMax')*100}')
 echo -e "[INFO]the node conntrack info:\nconntrackMax:$conntrackMax\nusedConntrack:$usedConntrack\nPercentage:$usedConntrackPercentage\n"
 }
   
@@ -306,7 +337,7 @@ check_weaver_node(){
  curl  127.0.0.1:6784/ip |jq .  1>weaver-ip-$currentDay.txt
  weaverStatus=$(cat weaver-status-$currentDay.txt |grep  Status|awk -F":| " '{print $NF}')
  if [[ $weaverStatus == "ready" ]]; then
-   echo  -e "[info]weaver is ready in this node\n\n"
+   echo  -e "[INFO]weaver is ready in this node\n\n"
  else
    echo -e "[ERROR]weaver is  not ready in this node\n\n"
  fi
@@ -314,7 +345,7 @@ check_weaver_node(){
  weaverEstablishNum=$(cat weaver-connections-$currentDay.txt |grep -v self|grep  established |wc -l)
  weaverFastdpNum=$(cat weaver-connections-$currentDay.txt |grep -v self|grep fastdp|wc -l)
  if [[ $weaverEstablishNum == $weaverFastdpNum ]];then
-   echo -e "[info]the weaver connection check passed\n\n"
+   echo -e "[INFO]the weaver connection check passed\n\n"
  else 
    wrongConnection=$(cat weaver-connections-$currentDay.txt |grep  establish|grep -v fastdp)
    echo -e "[ERROR]found wrong connections:\n$wrongConnection\n\n"
