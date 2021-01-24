@@ -9,13 +9,13 @@ currentDay=$(date +%F)
 sinceLogDay=$(date +%F -d "$logCheckDays days ago")
 healthLogDir="/tmp/healthCheck";cd /tmp/healthCheck
 maxLogSize=20480
-maxdiskUsagepercentage=85
-Domain=("www.sina.com" "www.baidu.com" "www.fujiangong.com" "lucky fjg")
+Domain=("www.sf-express.com")
 k8sConfDir="/etc/kubernetes"
-cpuSoftInterrupt=80
+maxcpuSoftInterrupt=80
 maxusedConntrackPercentage=80
 maxfilePercentage=80
 maxdockerFDUsedPercentage=80
+maxdiskUsagepercentage=85
 
 #定义日志的最大字节数，20480B=20K
 checkLogSize(){
