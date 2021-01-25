@@ -400,7 +400,7 @@ else
   timeDiffNum=$timeNUM
 fi  
 
-if [[ "$timeDiffNum" -gt "$maxTimeDiff" ]];then
+if [[ $(echo "$timeDiffNum" > "$maxTimeDiff"|bc) -eq 1  ]];then
  echo -e "[ERROR]NTP_TIME:this node Time deviation is more than $maxTimeDiff s"
 else 
  echo -e "[INFO]NTP_TIME: this node Time Synchronize to source is OK"
