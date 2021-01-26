@@ -262,7 +262,7 @@ for c in $Upcontainers
   cPID=$(docker inspect --format "{{.State.Pid}}" $c)
   ls /proc/$cPID -ld 1>/dev/null 2>&1
   if [[ $? -ne 0 ]];then
-    echo "[ERROR]DOCKER_the containerID:$c pid is not exist"
+    echo "[ERROR]DOCKER_the containerID:$c process is not exist"
   fi
  done
 }
@@ -271,7 +271,7 @@ check_containerd() {
   if ! pgrep -fl containerd|grep -Ev "shim|dockerd" > /dev/null ;then
     red "  [ERROR]CONTAINERD_service containerd is not running,process is not exist"
   else
-    green "[INFO]CONTAINERD_containerd process is exist"
+    green "[INFO]CONTAINERD_check containerd process is OK"
   fi
 }
 
@@ -280,18 +280,18 @@ check_containerd() {
 check_kubelet(){
 kubeletIsActived=$(systemctl  is-active kubelet)
 if  [[ $kubeletIsActived == "active" ]]; then
-   echo -e "[INFO]the kubelet processs  status is active\n"
+   echo -e "[INFO]KUBELET_the kubelet processs  status is active\n"
 else 
-   echo  -e "[ERROR] the kubelet  process is not running\n"
+   echo  -e "[ERROR]KUBELET_the kubelet  process is not running\n"
 fi
   
   ## kubelet健康端口检查
 kubeletCheckEndpoint=$(ss -tunlp|grep kubelet|grep 127.0.0.1|grep 102|awk '{print $5}')  
 kubeletCheckResult=$(curl $kubeletCheckEndpoint/healthz)
 if [[ $kubeletCheckResult == "ok" ]] ;then
-  echo -e "[INFO] kubelet port health check passed\n"
+  echo -e "[INFO]KUBELET_kubelet port health check passed\n"
 else
-  echo  -e "[ERROR]kubelet port health check not paased\n"
+  echo  -e "[ERROR]KUBELET_kubelet port health check not paased\n"
 fi
   
   ## kubelet7天内日志
@@ -299,12 +299,12 @@ journalctl -x   --since $sinceLogDay   -u kubelet 1>kubelet-$currentDay.log
 grep -E  "E[0-9]+|err|ERR|error|Error" kubelet-$currentDay.log 1>kubelet-$currentDay-Error.log
 if [[ $(checkLogSize kubelet-$currentDay-Error.log) == "true" ]];then
 	if [[  -s  kubelet-$currentDay-Error.log ]]; then
-	  echo  -e "[ERROR] kubelet error logs is: $(cat kubelet-$currentDay-Error.log)\n\n"
+	  echo  -e "[ERROR]KUBELET_kubelet error logs is: $(cat kubelet-$currentDay-Error.log)\n\n"
 	else
-		echo  -e "[INFO] kubelet has no error logs\n\n"
+		echo  -e "[INFO]KUBELET_kubelet has no error logs\n\n"
 	fi
 else
-    echo -e "[ERROR] kubelet error logs is too large,log file in $healthLogDir/kubelet-$currentDay-Error.log"
+    echo -e "[ERROR]KUBELET_kubelet error logs is too large,log file in $healthLogDir/kubelet-$currentDay-Error.log"
 fi
 }
   # 输出kube-proxy检查结果
@@ -312,9 +312,9 @@ check_kube_proxy(){
   ## kube-proxy 健康端口检查
 kubeProxyCheckResult=$(curl 127.0.0.1:10249/healthz)
 if [[ $kubeProxyCheckResult == "ok" ]] ;then
-  echo "[INFO] kube-proxy port health check passed"
+  echo "[INFO]KUBE-PROXY_kube-proxy port health check passed"
 else
-  echo "[ERROR]kube-proxy port health check not paased"
+  echo "[ERROR]KUBE-PROXY_kube-proxy port health check not paased"
 fi 
   
   ## kube-proxy错误日志过滤 
@@ -324,15 +324,15 @@ if [[ ! -z $proxyContainerID ]]; then
 	grep -E  "E[0-9]+|err|ERR|error|Error" kube-proxy-$currentDay.log 1>kube-proxy-$currentDay-Error.log
 	if [[ $(checkLogSize kube-proxy-$currentDay-Error.log) == "true" ]];then
 	  if [[  -s  kube-proxy-$currentDay-Error.log ]]; then
-	    echo  -e "[ERROR] kube-proxy error logs is: $(cat kube-proxy-$currentDay-Error.log)\n\n"
+	    echo  -e "[ERROR]KUBE-PROXY_kube-proxy error logs is: $(cat kube-proxy-$currentDay-Error.log)\n\n"
 	  else
-		echo  -e "[INFO] kube-proxy has no error logs\n\n"
+		echo  -e "[INFO]KUBE-PROXY_kube-proxy has no error logs\n\n"
 	  fi
    else
-     echo -e "[ERROR] kube-proxy error logs is too large,log file in $healthLogDir/kube-proxy-$currentDay-Error.log"
+     echo -e "[ERROR]KUBE-PROXY_kube-proxy error logs is too large,log file in $healthLogDir/kube-proxy-$currentDay-Error.log"
    fi
 else
-    echo -e "[ERROR] no found  kube-proxy containerd this node"
+    echo -e "[ERROR]KUBE-PROXY_no found kube-proxy containerd this node"
 fi
 } 
 
@@ -386,7 +386,6 @@ fi
 }
   #时间差检查
 check_ntp(){  
-#echo -e "[INFO] the NTP time info is:"
 timeDiff=$(chronyc  sources|grep -E "^\^\*" |awk '{print $(NF-3)}'|cut  -d[ -f 1)
 timeNUM=$(echo $timeDiff|grep -E -o "[0-9]*")
 timeUnit=$(echo $timeDiff|grep -E -o "[a-z]*")
@@ -437,12 +436,12 @@ _Call_Trace"  /var/log/messages 1>message-$currentDay-Error.log
 
 if [[ $(checkLogSize message-$currentDay-Error.log) == "true" ]];then
   if [[  -s  message-$currentDay-Error.log ]]; then
-	echo  -e "[ERROR] message error logs is: $(cat message-$currentDay-Error.log)\n\n"
+	echo  -e "[ERROR]MESSAGE_message error logs is: $(cat message-$currentDay-Error.log)\n\n"
   else
-	echo  -e "[INFO] message has no error logs\n\n"
+	echo  -e "[INFO]MESSAGE_message has no error logs\n\n"
   fi
 else
- echo -e "[ERROR] message error logs is too large,log file in $healthLogDir/message-$currentDay-Error.log"
+ echo -e "[ERROR]MESSAGE_message error logs is too large,log file in $healthLogDir/message-$currentDay-Error.log"
 fi
 }
 
